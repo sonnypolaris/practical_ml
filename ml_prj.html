@@ -152,7 +152,12 @@ nsv &lt;- nearZeroVar(training, saveMetrics = TRUE)</code></pre>
 </div>
 <div id="model-selection-build" class="section level2">
 <h2>Model Selection &amp; Build</h2>
-<p>For the model selection I did the following: 1. Removed lineral models from consideration based on the assumption that the problem domain did not fit well to lineral regression. 2. Tested standard classification trees (CART) but the overall accuracy was very low (approx .60). 3. Tested Random Forest with Cross Validation (3 folds).</p>
+<p>For the model selection I did the following:</p>
+<ol style="list-style-type: decimal">
+<li><p>Removed lineral models from consideration based on the assumption that the problem domain did not fit well to lineral regression.</p></li>
+<li><p>Tested standard classification trees (CART) but the overall accuracy was very low (approx .60).</p></li>
+<li><p>Tested Random Forest with Cross Validation (5 folds).</p></li>
+</ol>
 <p>The Random Forest model performed quite well with an accuracy rate between 0.97 and 0.98.</p>
 <pre class="r"><code># set the seed
 set.seed(525)
@@ -229,8 +234,11 @@ print (1 - cm1$overall['Accuracy'], digits = 4)</code></pre>
 <pre><code>## Accuracy 
 ##  0.02005</code></pre>
 <pre class="r"><code># Predict against testing set 2.
-predictions &lt;- predict(rfModel, newdata=testing_2)
-cm2 &lt;- confusionMatrix(predictions, testing_2$classe)
+predictions &lt;- predict(rfModel, newdata=testing_2)</code></pre>
+<pre><code>## Loading required package: randomForest
+## randomForest 4.6-12
+## Type rfNews() to see new features/changes/bug fixes.</code></pre>
+<pre class="r"><code>cm2 &lt;- confusionMatrix(predictions, testing_2$classe)
 
 # Predict against testing set 3.
 predictions &lt;- predict(rfModel, newdata=testing_3)

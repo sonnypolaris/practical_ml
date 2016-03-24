@@ -110,8 +110,11 @@ nsv <- nearZeroVar(training, saveMetrics = TRUE)
 
 ## Model Selection & Build
 For the model selection I did the following:
+
 1. Removed lineral models from consideration based on the assumption that the problem domain did not fit well to lineral regression.
+
 2. Tested standard classification trees (CART) but the overall accuracy was very low (approx .60).
+
 3. Tested Random Forest with Cross Validation (5 folds).
 
 The Random Forest model performed quite well with an accuracy rate between 0.97 and 0.98.
