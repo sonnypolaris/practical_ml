@@ -1,0 +1,168 @@
+---
+title: "Practical Machine Learning Project"
+author: "Sonny Rivera"
+date: "March 21, 2016"
+output: html_document
+---
+```{r Packages Needed, echo=TRUE}
+library(caret); 
+```
+## Executive Summary
+For the model selection, I chose a Random Forest model.  Liner models were removed from consideration based on the assumption that the glm does not fit the problem domain very well.  Classification trees (CART) was tested but the initial models did not perform well (0.60 accuracy).  
+
+Training the models on the full training set did take a long time so I broke the training set into 4 different training subsets.  Each of these subsets was divided into a training and testing set with a 70/30 split.  I was unable to ensure that an observation was only present in 1 subset of data.  This is important as data in multiple training sets could lead to a bias in the predicted outcomes. Therefore, I expect the out of sample error on the 20 test cases to be higher that the out of sample error on my 4 testing data sets.
+
+I also created the models with k-folds (5) cross validation.
+
+### Data Exploration
+```{r Project Setup,results='hide', echo=TRUE, cache=TRUE}
+setwd('~/Documents/repos/practical_ml')
+
+# read data and set bad data to NA
+training <- read.csv("./data/pml-training.csv", na.strings=c("NA","#DIV/0!",""))
+testing  <- read.csv("./data/pml-testing.csv" , na.strings=c("NA","#DIV/0!",""))
+```
+
+### Data Cleaning Helper Methods
+My approach to cleaning up the data is to
+
+1. Set bad data to NA on import.
+2. Calculate the ratio of NA values to the number of rows in the training set.
+3. Remove all columns that have ANY NA values.
+
+The meanNAsByCol calcualtes the ratio of NAs to the number of observations. 
+The unusableCols identifies the columns to remove based on the threshold values.
+A threshold value of 1.0 means there are no NAs and a value of 0.0 means all values are NA.
+
+```{r Data Cleaning Helpers, echo=TRUE, results='hide'}
+# calc the ratio
+meanNAsByCol <- function(x) {
+  as.vector(apply(x, 2, function(x) { length(which(!is.na(x)))/ length(x) } ) )
+}
+
+# fuction to identify cols with NAs below threshold. Remove those columns.
+# threshold = the criteria for determining who many columns to remove.
+unusableCols <- function (x, threshold) {
+  c0 <- meanNAsByCol(x)
+  toRemove <- c()
+  for (i in 1:length(c0)) {
+    if (c0[i] < threshold) {
+      toRemove <- c(toRemove, -1 * i)
+    }
+  }
+  toRemove
+}
+
+```
+
+At this point, we need to call the data cleansing helper method to identify the columns to remove.
+I also added columns 1 to 6 to the list of "columns to remove" because they don't 
+add value to the prediction.
+
+```{r Remove Columns, echo=TRUE, results='hide', cache=TRUE}
+# create a vector of columns to be removed from both training and testing
+colList <- unusableCols(training, 1.0) # 
+colList <- c (-6:-1,colList) # remove cols 1:6
+
+# removing the unusable columns from training and testing data splits
+training <- training [,colList]
+testing  <- testing[,colList] 
+
+# verify we have the same columns in testing and training data splits
+names(testing [, 1:ncol(testing) - 1]) == names(training [,1:ncol(training) - 1])
+```
+
+## Training & Testing Data 
+I split the training data into multiple subsets of data. Each of these 4 subsets where then
+divided in the training & testing data sets with a 70/30 split.  There may be a bit of data
+repeated between each subset of data which could result in additional bias or slight overfitting.
+Therefore, I expect the out of sample error on the testing sets to be slightly higher than on the training sets.
+
+```{r Setup the Training/Testing Sets, echo=TRUE, results='markup', cache=TRUE}
+
+# create a list of 4 data frames.  Each with about 25% of the data.
+dfs <- split(training, sample(1:4, nrow(training), replace=T))
+
+# partition each of the sub-traiing data sets into both training andt testing.
+intrain_1 <- createDataPartition(y=dfs[[1]]$classe, p=0.7, list=FALSE)
+intrain_2 <- createDataPartition(y=dfs[[2]]$classe, p=0.7, list=FALSE)
+intrain_3 <- createDataPartition(y=dfs[[3]]$classe, p=0.7, list=FALSE)
+intrain_4 <- createDataPartition(y=dfs[[4]]$classe, p=0.7, list=FALSE)
+intrain_all <- createDataPartition(y=training$classe, p=0.7, list=FALSE)
+
+training_1 <- dfs[[1]][ intrain_1,]
+testing_1  <- dfs[[1]][-intrain_1,]
+training_2 <- dfs[[2]][ intrain_2,]
+testing_2  <- dfs[[2]][-intrain_2,]
+training_3 <- dfs[[3]][ intrain_3,]
+testing_3  <- dfs[[3]][-intrain_3,]
+training_4 <- dfs[[4]][ intrain_4,]
+testing_4  <- dfs[[4]][-intrain_4,]
+training_all <- training[ intrain_all,]
+testing_all  <- training[-intrain_all,]
+```
+
+I tested to see if any of the predictors have a Near Zero Variance (NZV).  No predictors do have NZV.
+```{r , echo=TRUE, results='markup'}
+# validate that the predictors do not have Near Zero variance (NZV)
+nsv <- nearZeroVar(training, saveMetrics = TRUE)
+```
+
+## Model Selection & Build
+For the model selection I did the following:
+1. Removed lineral models from consideration based on the assumption that the problem domain did not fit well to lineral regression.
+2. Tested standard classification trees (CART) but the overall accuracy was very low (approx .60).
+3. Tested Random Forest with Cross Validation (5 folds).
+
+The Random Forest model performed quite well with an accuracy rate between 0.97 and 0.98.
+
+```{r Random Forest , echo=TRUE, results='markup', cache=TRUE}
+# set the seed
+set.seed(525)
+# build random forrest model
+rfModel <- train(training_1$classe ~ ., method="rf", 
+                trControl=trainControl(method = "cv", number = 5), 
+                data=training_1)
+print(rfModel, digits=3)
+
+# Predict against testing set 1.
+predictions <- predict(rfModel, newdata=testing_1)
+cm1 <- confusionMatrix(predictions, testing_1$classe)
+print(cm1, digits=4)
+```
+
+## Out of Sample Error
+The overall accuracy of the the Random Forest Model on training set number 1 and testing data set number 1 is listed below.  However, since I created 4 different testing data sets, I went ahead with predicting against the other 3 testing data sets.  I then averaged the out of sample error.
+
+```{r Out of Sample Error}
+# Over Overall Accuracy
+print(cm1$overall)
+
+# Out of sample error based on testing set 1 
+print (1 - cm1$overall['Accuracy'], digits = 4)
+
+# Predict against testing set 2.
+predictions <- predict(rfModel, newdata=testing_2)
+cm2 <- confusionMatrix(predictions, testing_2$classe)
+
+# Predict against testing set 3.
+predictions <- predict(rfModel, newdata=testing_3)
+cm3 <- confusionMatrix(predictions, testing_3$classe)
+
+# Predict against testing set 4.
+predictions <- predict(rfModel, newdata=testing_4)
+cm4 <- confusionMatrix(predictions, testing_4$classe)
+
+mean(c(1-cm1$overall['Accuracy'], 1-cm2$overall['Accuracy']
+       , 1-cm3$overall['Accuracy'], 1-cm4$overall['Accuracy']))
+
+```
+
+The Random Forest model build against training set 1 was selected for the model.  Therefore, I 
+used Random Forest model to predict the outcomes for the 20 test cased provided in the testing data set.
+
+```{r Predictions }
+# Obtain predictions from the 20 samples in the out of sample test data.
+testPred <- predict(rfModel, newdata=testing)
+print(testPred)
+```
